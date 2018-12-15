@@ -349,3 +349,381 @@ pytest tests/performance/ -v --runpod-endpoint=$ENDPOINT_URL
 3. **Monitor daily costs**
    - Run cost-calculator.py daily
    - Set up alerts for >$20/day
+   - Review monthly spending trends
+
+4. **Optimize for cost efficiency**
+   - Use FP8 quantization
+   - Tune gpu_memory_utilization
+   - Adjust max_num_seqs based on traffic
+   - Use network volumes for model caching
+
+### Cost Tracking
+
+```bash
+# Daily cost check (add to cron)
+python scripts/cost-calculator.py --days 1
+
+# Weekly cost report
+python scripts/cost-calculator.py --days 7 --detailed
+
+# Monthly budget check
+python scripts/cost-calculator.py --days 30 --budget 500
+```
+
+---
+
+## 🔐 Security Requirements
+
+### Secrets Management
+
+#### Secrets Storage Policy
+
+**Two-Tier Secrets System:**
+1. **Local Development**: `configs/local.env` (repo-scoped, gitignored)
+2. **CI/CD**: GitHub Actions Secrets (repository settings)
+
+**NEVER** store secrets in:
+- ❌ `~/.bashrc` or other user-level shell configs
+- ❌ Committed files (any file tracked by git)
+- ❌ System-wide environment variables
+- ❌ Docker images
+
+#### Local Development Secrets (configs/local.env)
+
+```bash
+# ✅ CORRECT: Store in configs/local.env (gitignored)
+GITHUB_PERSONAL_ACCESS_TOKEN=github_pat_YOUR_TOKEN
+DOCKERHUB_TOKEN=github_pat_YOUR_TOKEN
+GITHUB_USERNAME=vjranagit
+RUNPOD_API_KEY_DEV=your_dev_key
+HF_TOKEN=hf_your_token
+
+# ❌ NEVER DO THIS: ~/.bashrc or committed files
+# DO NOT put secrets in ~/.bashrc
+# DO NOT commit configs/local.env to git
+```
+
+**How to Use**:
+1. Copy template: `cp configs/local.env.example configs/local.env`
+2. Fill in your actual values
+3. Scripts automatically load it: `./scripts/deploy.sh dev`
+
+**Why Repo-Scoped?**
+- ✅ Project-specific (doesn't pollute global environment)
+- ✅ Automatically gitignored
+- ✅ Easy to manage per project
+- ✅ No system-wide config changes
+
+#### CI/CD Secrets (GitHub Actions)
+
+- Configure in: Repository Settings → Secrets and variables → Actions
+- Use for: Automated deployments, builds, tests
+- Naming convention:
+  ```
+  RUNPOD_API_KEY_DEV
+  RUNPOD_API_KEY_PROD
+  OPENROUTER_API_KEY
+  HF_TOKEN
+  ```
+
+#### Never Commit Secrets
+```bash
+# ❌ NEVER DO THIS
+API_KEY=sk-1234567890abcdef
+
+# ✅ DO THIS
+API_KEY=${RUNPOD_API_KEY}  # From configs/local.env or GitHub Secrets
+```
+
+#### Secret Rotation
+- Rotate personal access tokens every 90 days
+- Rotate API keys quarterly
+- Update both `configs/local.env` AND GitHub Secrets
+- Test after rotation
+
+### API Security
+
+1. **Authentication required**
+   - All endpoints require API key
+   - Validate on every request
+   - Use Bearer token format
+
+2. **Rate limiting**
+   - Implement per-key limits
+   - Default: 100 requests/minute
+   - Configurable per environment
+
+3. **Input validation**
+   - Validate all parameters
+   - Reject invalid requests early
+   - Sanitize inputs
+   - Enforce token limits
+
+4. **Logging security**
+   - Never log API keys
+   - Redact sensitive data
+   - Log authentication attempts
+   - Monitor for abuse
+
+---
+
+## 📊 Monitoring & Logging
+
+### Logging Standards
+
+#### Log Levels
+- **ERROR**: System failures, exceptions
+- **WARNING**: Degraded performance, rate limits hit
+- **INFO**: Request lifecycle, deployments
+- **DEBUG**: Detailed debugging (dev only)
+
+#### Log Format
+```python
+# Structured JSON logging
+{
+  "timestamp": "2025-11-13T10:30:00Z",
+  "level": "INFO",
+  "request_id": "req_abc123",
+  "event": "completion_generated",
+  "duration_ms": 1234,
+  "tokens": {
+    "prompt": 100,
+    "completion": 50,
+    "total": 150
+  },
+  "cost_usd": 0.002
+}
+```
+
+#### What to Log
+- ✅ Request start/end
+- ✅ Errors and exceptions
+- ✅ Performance metrics
+- ✅ Cost per request
+- ❌ API keys or secrets
+- ❌ Full request/response bodies (too verbose)
+
+### Performance Monitoring
+
+#### Key Metrics
+```yaml
+Throughput:
+  - tokens_per_second
+  - requests_per_second
+
+Latency:
+  - time_to_first_token (TTFT)
+  - total_generation_time
+  - p50, p95, p99 latencies
+
+Resources:
+  - gpu_utilization
+  - memory_usage
+  - active_workers
+
+Costs:
+  - cost_per_request
+  - cost_per_million_tokens
+  - daily_spend
+```
+
+#### Alerting Thresholds
+- Latency P95 > 2000ms
+- Error rate > 5%
+- GPU utilization > 95% for >10 min
+- Daily costs > $50
+- No requests for >1 hour (prod only)
+
+---
+
+## 📚 Documentation Standards
+
+### Documentation Requirements
+
+#### All Code Changes Must Update
+1. **Inline comments** - For complex logic
+2. **Docstrings** - For all functions/classes
+3. **README.md** - If user-facing changes
+4. **todo.md** - Mark tasks complete
+5. **project-outline.md** - If architecture changes
+6. **This rulebook** - If process changes
+
+### Documentation Quality
+
+#### Good Documentation
+```markdown
+## Deploying to Production
+
+1. **Merge dev to main**:
+   ```bash
+   git checkout main
+   git merge dev
+   git push origin main
+   ```
+
+2. **Monitor deployment**:
+   - Check GitHub Actions logs
+   - Verify endpoint health: `curl https://api.../health`
+   - Watch for errors in RunPod dashboard
+
+3. **Validate performance**:
+   ```bash
+   python scripts/benchmark.py --endpoint prod
+   ```
+
+Expected: >450 TPS, <1200ms latency
+```
+
+#### Bad Documentation
+```markdown
+## Deploy
+Run the deploy script.
+```
+
+### Keep Docs Updated
+
+- [ ] Update docs in same PR as code changes
+- [ ] Review docs quarterly for accuracy
+- [ ] Remove outdated information
+- [ ] Add examples for new features
+
+---
+
+## 🔄 Continuous Improvement
+
+### Regular Reviews
+
+#### Weekly
+- Review active todos in todo.md
+- Check cost trends
+- Review error logs
+- Update documentation
+
+#### Monthly
+- Performance benchmark comparison
+- Dependency updates
+- Security audit
+- Cost optimization review
+
+#### Quarterly
+- Architecture review
+- Technology updates (vLLM, PyTorch)
+- Process improvements
+- Rulebook updates
+
+### Metrics-Driven Decisions
+
+Before making changes, measure:
+1. Current baseline metrics
+2. Expected improvement
+3. Cost implications
+4. Risk assessment
+
+After changes:
+1. Compare to baseline
+2. Document results
+3. Update targets if needed
+
+---
+
+## 🎯 Definition of Done
+
+### Feature is Done When
+
+- [ ] Code written and tested locally
+- [ ] Unit tests added/updated
+- [ ] Integration tests passing
+- [ ] Documentation updated
+- [ ] Code reviewed (if team >1)
+- [ ] Deployed to dev
+- [ ] Tested in dev environment
+- [ ] Performance validated
+- [ ] Cost impact verified
+- [ ] Merged to dev branch
+- [ ] todo.md updated
+
+### Ready for Production When
+
+- [ ] All "Feature Done" criteria met
+- [ ] Tested in dev for 24+ hours
+- [ ] No critical errors
+- [ ] Performance meets targets
+- [ ] Cost within budget
+- [ ] Monitoring configured
+- [ ] Rollback plan tested
+- [ ] Changelog updated
+- [ ] Deployed to prod
+- [ ] Post-deployment validation passed
+
+---
+
+## 🚫 Anti-Patterns to Avoid
+
+### Code Anti-Patterns
+- ❌ Hardcoded secrets or API keys
+- ❌ Using `time.sleep()` for synchronization
+- ❌ Ignoring error handling
+- ❌ Global mutable state
+- ❌ Magic numbers without constants
+
+### Configuration Anti-Patterns
+- ❌ Different configs for same environment
+- ❌ Secrets in version control
+- ❌ Inconsistent naming conventions
+- ❌ Missing default values
+
+### Deployment Anti-Patterns
+- ❌ Deploying untested code
+- ❌ Skipping staging environment
+- ❌ No rollback plan
+- ❌ Deploying on Fridays (unless critical)
+- ❌ Multiple changes in one deployment
+
+### Cost Anti-Patterns
+- ❌ No workers_max limit
+- ❌ workers_min > 0 without justification
+- ❌ Not using network volumes
+- ❌ Running dev 24/7
+
+---
+
+## 📞 Getting Help
+
+### Troubleshooting Order
+1. Check docs/TROUBLESHOOTING.md
+2. Review recent changes in git log
+3. Check RunPod dashboard
+4. Review application logs
+5. Test in dev environment
+6. Create GitHub issue with details
+
+### When Creating Issues
+
+Include:
+- Environment (dev/prod)
+- Steps to reproduce
+- Expected vs actual behavior
+- Relevant logs
+- Cost impact (if applicable)
+- Configuration details
+
+---
+
+## ✅ Compliance Checklist
+
+Use this checklist for every significant change:
+
+### Before Coding
+- [ ] Requirement clearly understood
+- [ ] Cost impact estimated
+- [ ] Approach discussed (if team >1)
+- [ ] Todo item created
+
+### During Development
+- [ ] Following code style guide
+- [ ] Writing tests as you go
+- [ ] Documenting as you code
+- [ ] Committing regularly
+
+### Before PR
+- [ ] All tests passing
